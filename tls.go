@@ -121,8 +121,6 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		return nil, errors.New("REALITY: failed to dial dest: " + err.Error())
 	}
 
-	fmt.Println("reality: start to make the connection.")
-
 	underlying := conn.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
 
 	mutex := new(sync.Mutex)
