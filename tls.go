@@ -39,6 +39,11 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+type CloseWriteConn interface {
+	net.Conn
+	CloseWrite() error
+}
+
 type MirrorConn struct {
 	*sync.Mutex
 	net.Conn
@@ -118,7 +123,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 
 	fmt.Println("reality: start to make the connection.")
 
-	underlying := conn
+	raw := conn
+	if pc, ok := conn.(*proxyproto.Conn); ok {
+		raw = pc.Raw() // for TCP splicing in io.Copy()
+	}
+	underlying := raw.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
 
 	mutex := new(sync.Mutex)
 
@@ -170,7 +179,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 				plainText := make([]byte, 32)
 				copy(ciphertext, hs.clientHello.sessionId)
 				copy(hs.clientHello.sessionId, plainText) // hs.clientHello.sessionId points to hs.clientHello.raw[39:]
-				if _, err = aead.Open(plainText[:0], hs.clientHello.random[20:], ciphertext, hs.clientHello.raw); err != nil {
+				if _, err = aead.Open(plainText[:0], hs.clientHello.random[20:], ciphertext, hs.clientHello.original); err != nil {
 					break
 				}
 				copy(hs.clientHello.sessionId, ciphertext)
@@ -324,6 +333,10 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			}
 			conn.Write(s2cSaved)
 			io.Copy(underlying, target)
+			// Here is bidirectional direct forwarding:
+			// client ---underlying--- server ---target--- dest
+			// Call `underlying.CloseWrite()` once `io.Copy()` returned
+			underlying.CloseWrite()
 		}
 		waitGroup.Done()
 	}()
@@ -423,6 +436,7 @@ func NewListener(inner net.Listener, config *Config) net.Listener {
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
 func Listen(network, laddr string, config *Config) (net.Listener, error) {
+	// If this condition changes, consider updating http.Server.ServeTLS too.
 	if config == nil || len(config.Certificates) == 0 &&
 		config.GetCertificate == nil && config.GetConfigForClient == nil {
 		return nil, errors.New("tls: neither Certificates, GetCertificate, nor GetConfigForClient set in Config")
@@ -559,11 +573,14 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 	return c, nil
 }
 
-// LoadX509KeyPair reads and parses a public/private key pair from a pair
-// of files. The files must contain PEM encoded data. The certificate file
-// may contain intermediate certificates following the leaf certificate to
-// form a certificate chain. On successful return, Certificate.Leaf will
-// be nil because the parsed form of the certificate is not retained.
+// LoadX509KeyPair reads and parses a public/private key pair from a pair of
+// files. The files must contain PEM encoded data. The certificate file may
+// contain intermediate certificates following the leaf certificate to form a
+// certificate chain. On successful return, Certificate.Leaf will be populated.
+//
+// Before Go 1.23 Certificate.Leaf was left nil, and the parsed certificate was
+// discarded. This behavior can be re-enabled by setting "x509keypairleaf=0"
+// in the GODEBUG environment variable.
 func LoadX509KeyPair(certFile, keyFile string) (Certificate, error) {
 	certPEMBlock, err := os.ReadFile(certFile)
 	if err != nil {
@@ -577,8 +594,11 @@ func LoadX509KeyPair(certFile, keyFile string) (Certificate, error) {
 }
 
 // X509KeyPair parses a public/private key pair from a pair of
-// PEM encoded data. On successful return, Certificate.Leaf will be nil because
-// the parsed form of the certificate is not retained.
+// PEM encoded data. On successful return, Certificate.Leaf will be populated.
+//
+// Before Go 1.23 Certificate.Leaf was left nil, and the parsed certificate was
+// discarded. This behavior can be re-enabled by setting "x509keypairleaf=0"
+// in the GODEBUG environment variable.
 func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 	fail := func(err error) (Certificate, error) { return Certificate{}, err }
 
@@ -632,6 +652,8 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 	if err != nil {
 		return fail(err)
 	}
+
+	cert.Leaf = x509Cert
 
 	cert.PrivateKey, err = parsePrivateKey(keyDERBlock.Bytes)
 	if err != nil {
