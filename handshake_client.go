@@ -668,7 +668,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 			c.sendAlert(alertUnexpectedMessage)
 			return errors.New("tls: received unexpected CertificateStatus message")
 		}
-		
+
 		c.ocspResponse = cs.response
 
 		msg, err = c.readHandshake(&hs.finishedHash)
@@ -980,7 +980,7 @@ func (hs *clientHandshakeState) readFinished(out []byte) error {
 	if err := transcriptMsg(serverFinished, &hs.finishedHash); err != nil {
 		return err
 	}
-	
+
 	copy(out, verify)
 	return nil
 }

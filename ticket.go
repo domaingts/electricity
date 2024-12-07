@@ -90,7 +90,7 @@ type SessionState struct {
 	activeCertHandles []*activeCert
 	ocspResponse      []byte
 	scts              [][]byte
-	verifiedChains [][]*x509.Certificate
+	verifiedChains    [][]*x509.Certificate
 	alpnProtocol      string // only set if EarlyData is true
 
 	// Client-side TLS 1.3-only fields.

@@ -34,7 +34,7 @@ type Conn struct {
 	conn        net.Conn
 	isClient    bool
 	handshakeFn func(context.Context) error // (*Conn).clientHandshake or serverHandshake
-	quic *quicState // nil for non-QUIC connections
+	quic        *quicState                  // nil for non-QUIC connections
 
 	// isHandshakeComplete is true if the connection is currently transferring
 	// application data (i.e. is not currently processing a handshake).
@@ -1242,7 +1242,7 @@ func (c *Conn) unmarshalHandshakeMessage(data []byte, transcript transcriptHash)
 	if transcript != nil {
 		transcript.Write(data)
 	}
-	
+
 	return m, nil
 }
 

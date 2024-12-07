@@ -123,11 +123,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 
 	fmt.Println("reality: start to make the connection.")
 
-	raw := conn
-	if pc, ok := conn.(*proxyproto.Conn); ok {
-		raw = pc.Raw() // for TCP splicing in io.Copy()
-	}
-	underlying := raw.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
+	underlying := conn.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
 
 	mutex := new(sync.Mutex)
 
