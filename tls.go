@@ -138,6 +138,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 	}
 
 	copying := false
+	stole := false
 
 	waitGroup := new(sync.WaitGroup)
 	waitGroup.Add(2)
@@ -146,7 +147,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		for {
 			mutex.Lock()
 			hs.clientHello, err = hs.c.readClientHello(context.Background()) // TODO: Change some rules in this function.
-			if copying || err != nil || hs.c.vers != VersionTLS13 || !config.ServerNames[hs.clientHello.serverName] {
+			if !config.ServerNames[hs.clientHello.serverName] {
+				stole = true
+				break
+			}
+			if copying || err != nil || hs.c.vers != VersionTLS13 {
 				break
 			}
 			for i, keyShare := range hs.clientHello.keyShares {
@@ -200,7 +205,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			break
 		}
 		mutex.Unlock()
-		if hs.c.conn != conn {
+		if hs.c.conn != conn && !stole {
 			if config.Show && hs.clientHello != nil {
 				fmt.Printf("REALITY remoteAddr: %v\tforwarded SNI: %v\n", remoteAddr, hs.clientHello.serverName)
 			}
@@ -228,7 +233,9 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			mutex.Lock()
 			s2cSaved = append(s2cSaved, buf[:n]...)
 			if hs.c.conn != conn {
-				copying = true // if the target already sent some data, just start bidirectional direct forwarding
+				if !stole {
+					copying = true // if the target already sent some data, just start bidirectional direct forwarding
+				}
 				break
 			}
 			if len(s2cSaved) > size {
@@ -325,12 +332,14 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 					waitGroup.Done()
 				}()
 			}
-			conn.Write(s2cSaved)
-			io.Copy(underlying, target)
-			// Here is bidirectional direct forwarding:
-			// client ---underlying--- server ---target--- dest
-			// Call `underlying.CloseWrite()` once `io.Copy()` returned
-			underlying.CloseWrite()
+			if !stole {
+				conn.Write(s2cSaved)
+				io.Copy(underlying, target)
+				// Here is bidirectional direct forwarding:
+				// client ---underlying--- server ---target--- dest
+				// Call `underlying.CloseWrite()` once `io.Copy()` returned
+				underlying.CloseWrite()
+			}
 		}
 		waitGroup.Done()
 	}()
