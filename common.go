@@ -26,7 +26,7 @@ import (
 	"time"
 	_ "unsafe" // for linkname
 
-	"github.com/domaingts/electricity/fips140tls"
+	"github.com/sagernet/reality/fips140tls"
 )
 
 const (
@@ -895,7 +895,6 @@ type EncryptedClientHelloKey struct {
 	// server.
 	SendAsRetry bool
 }
-
 
 const (
 	// ticketKeyLifetime is how long a ticket key remains valid and can be used to

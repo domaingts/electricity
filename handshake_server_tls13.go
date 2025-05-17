@@ -26,9 +26,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/domaingts/electricity/fips140tls"
-	"github.com/domaingts/electricity/hpke"
-	"github.com/domaingts/electricity/tls13"
+	"github.com/sagernet/reality/fips140tls"
+	"github.com/sagernet/reality/hpke"
+	"github.com/sagernet/reality/tls13"
 )
 
 // maxClientPSKIdentities is the number of client PSK identities the server will

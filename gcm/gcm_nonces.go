@@ -8,7 +8,7 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/domaingts/electricity/aes"
+	"github.com/sagernet/reality/aes"
 )
 
 // SealWithRandomNonce encrypts plaintext to out, and writes a random nonce to

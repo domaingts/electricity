@@ -21,8 +21,8 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/sys/cpu"
 
-	"github.com/domaingts/electricity/gcm"
-	fipsaes "github.com/domaingts/electricity/aes"
+	fipsaes "github.com/sagernet/reality/aes"
+	"github.com/sagernet/reality/gcm"
 )
 
 // CipherSuite is a TLS cipher suite. Note that most functions in this package

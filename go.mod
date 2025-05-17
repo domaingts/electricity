@@ -1,4 +1,4 @@
-module github.com/domaingts/electricity
+module github.com/sagernet/reality
 
 go 1.24
 

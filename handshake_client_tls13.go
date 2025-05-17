@@ -10,7 +10,7 @@ import (
 	"crypto"
 	"crypto/hkdf"
 	"crypto/hmac"
-    "crypto/mlkem"
+	"crypto/mlkem"
 	"crypto/rsa"
 	"crypto/subtle"
 	"errors"
@@ -18,7 +18,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/domaingts/electricity/tls13"
+	"github.com/sagernet/reality/tls13"
 )
 
 type clientHandshakeStateTLS13 struct {

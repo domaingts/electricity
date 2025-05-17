@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"hash"
 
-	"github.com/domaingts/electricity/tls12"
+	"github.com/sagernet/reality/tls12"
 )
 
 type prfFunc func(secret []byte, label string, seed []byte, keyLen int) []byte

@@ -51,8 +51,8 @@ import (
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 
-	fipsaes "github.com/domaingts/electricity/aes"
-	"github.com/domaingts/electricity/gcm"
+	fipsaes "github.com/sagernet/reality/aes"
+	"github.com/sagernet/reality/gcm"
 )
 
 type CloseWriteConn interface {
