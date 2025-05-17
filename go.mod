@@ -1,4 +1,4 @@
-module github.com/xtls/reality
+module github.com/domaingts/electricity
 
 go 1.24
 

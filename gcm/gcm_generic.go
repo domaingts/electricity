@@ -8,7 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 
-	"github.com/xtls/reality/aes"
+	"github.com/domaingts/electricity/aes"
 )
 
 func sealGeneric(out []byte, g *GCM, nonce, plaintext, additionalData []byte) {

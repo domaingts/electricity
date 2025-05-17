@@ -7,8 +7,8 @@ package gcm
 import (
 	"errors"
 
-	"github.com/xtls/reality/aes"
-	"github.com/xtls/reality/alias"
+	"github.com/domaingts/electricity/aes"
+	"github.com/domaingts/electricity/alias"
 )
 
 // GCM represents a Galois Counter Mode with a specific key.

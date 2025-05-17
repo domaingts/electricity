@@ -7,7 +7,7 @@ package aes
 import (
 	"strconv"
 
-	"github.com/xtls/reality/alias"
+	"github.com/domaingts/electricity/alias"
 )
 
 // BlockSize is the AES block size in bytes.
