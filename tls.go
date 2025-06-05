@@ -163,11 +163,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		for {
 			mutex.Lock()
 			hs.clientHello, _, err = hs.c.readClientHello(context.Background()) // TODO: Change some rules in this function.
-			if !config.ServerNames[hs.clientHello.serverName] {
+			if err != nil || !config.ServerNames[hs.clientHello.serverName] {
 				stole = true
 				break
 			}
-			if copying || err != nil || hs.c.vers != VersionTLS13 {
+			if copying || hs.c.vers != VersionTLS13 {
 				break
 			}
 			for _, keyShare := range hs.clientHello.keyShares {
