@@ -28,11 +28,11 @@ TODO List: TODO
                 "decryption": "none"
             },
             "streamSettings": {
-                "network": "tcp",
+                "network": "raw",
                 "security": "reality",
                 "realitySettings": {
                     "show": false, // Optional, if true, output debugging information
-                    "dest": "example.com:443", // Required, the format is the same as the dest of VLESS fallbacks
+                    "target": "example.com:443", // Required, the format is the same as the dest of VLESS fallbacks
                     "xver": 0, // Optional, the format is the same as xver of VLESS fallbacks
                     "serverNames": [ // Required, the acceptable serverName list, does not support * wildcards for now
                         "example.com",
@@ -45,7 +45,19 @@ TODO List: TODO
                     "shortIds": [ // Required, the acceptable shortId list, which can be used to distinguish different clients
                         "", // If there is this item, the client shortId can be empty
                         "0123456789abcdef" // 0 to f, the length is a multiple of 2, the maximum length is 16
-                    ]
+                    ],
+                    // These two limitations below are optional, for rate limiting fallback connections, bytesPerSec's default is 0, which means disabled
+                    // It's a detectable pattern, not recommended to be enabled, RANDOMIZE these parameters if you're a web-panel/one-click-script developer
+                    "limitFallbackUpload": {
+                        "afterBytes": 0, // Start throttling after (bytes)
+                        "bytesPerSec": 0, // Base speed (bytes/s)
+                        "burstBytesPerSec": 0 // Burst capacity (bytes/s), works only when it is larger than bytesPerSec
+                    },
+                    "limitFallbackDownload": {
+                        "afterBytes": 0, // Start throttling after (bytes)
+                        "bytesPerSec": 0, // Base speed (bytes/s)
+                        "burstBytesPerSec": 0 // Burst capacity (bytes/s), works only when it is larger than bytesPerSec
+                    }
                 }
             }
         }
@@ -84,7 +96,7 @@ The next main goal of REALITY is "**pre-built mode**", that is, to collect and b
                 ]
             },
             "streamSettings": {
-                "network": "tcp",
+                "network": "raw",
                 "security": "reality",
                 "realitySettings": {
                     "show": false, // Optional, if true, output debugging information
@@ -111,3 +123,7 @@ The REALITY client can perfectly distinguish temporary trusted certificates, rea
 1. When the temporary trusted certificate is received, the proxy connection is available and everything is business as usual
 2. When the real certificate is received, enter the crawler mode (spiderX)
 3. When an invalid certificate is received, TLS alert will be sent and the connection will be disconnected
+
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/XTLS/REALITY.svg)](https://starchart.cc/XTLS/REALITY)

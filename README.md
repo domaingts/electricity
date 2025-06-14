@@ -28,11 +28,11 @@ TODO List: TODO
                 "decryption": "none"
             },
             "streamSettings": {
-                "network": "tcp",
+                "network": "raw",
                 "security": "reality",
                 "realitySettings": {
                     "show": false, // 选填，若为 true，输出调试信息
-                    "dest": "example.com:443", // 必填，格式同 VLESS fallbacks 的 dest
+                    "target": "example.com:443", // 必填，格式同 VLESS fallbacks 的 dest
                     "xver": 0, // 选填，格式同 VLESS fallbacks 的 xver
                     "serverNames": [ // 必填，客户端可用的 serverName 列表，暂不支持 * 通配符
                         "example.com",
@@ -45,7 +45,19 @@ TODO List: TODO
                     "shortIds": [ // 必填，客户端可用的 shortId 列表，可用于区分不同的客户端
                         "", // 若有此项，客户端 shortId 可为空
                         "0123456789abcdef" // 0 到 f，长度为 2 的倍数，长度上限为 16
-                    ]
+                    ],
+                    // 下列两个 limit 为选填，可对未通过验证的回落连接限速，bytesPerSec 默认为 0 即不启用
+                    // 回落限速是一种特征，不建议启用，如果您是面板/一键脚本开发者，务必让这些参数随机化
+                    "limitFallbackUpload": {
+                        "afterBytes": 0, // 传输指定字节后开始限速
+                        "bytesPerSec": 0, // 基准速率（字节/秒）
+                        "burstBytesPerSec": 0 // 突发速率（字节/秒），大于 bytesPerSec 时生效
+                    },
+                    "limitFallbackDownload": {
+                        "afterBytes": 0, // 传输指定字节后开始限速
+                        "bytesPerSec": 0, // 基准速率（字节/秒）
+                        "burstBytesPerSec": 0 // 突发速率（字节/秒），大于 bytesPerSec 时生效
+                    }
                 }
             }
         }
@@ -84,7 +96,7 @@ REALITY 的下一个主要目标是“**预先构建模式**”，即提前采�
                 ]
             },
             "streamSettings": {
-                "network": "tcp",
+                "network": "raw",
                 "security": "reality",
                 "realitySettings": {
                     "show": false, // 选填，若为 true，输出调试信息

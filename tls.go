@@ -50,6 +50,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/juju/ratelimit"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
@@ -99,6 +100,38 @@ func (c *MirrorConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+type RatelimitedConn struct {
+	net.Conn
+	After  int64
+	Bucket *ratelimit.Bucket
+}
+
+func (c *RatelimitedConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	if n != 0 {
+		if c.After > 0 {
+			c.After -= int64(n)
+		} else {
+			c.Bucket.Wait(int64(n))
+		}
+	}
+	return n, err
+}
+
+func NewRatelimitedConn(conn net.Conn, limit *LimitFallback) net.Conn {
+	if limit.BytesPerSec == 0 {
+		return conn
+	}
+
+	burstBytesPerSec := max(limit.BurstBytesPerSec, limit.BytesPerSec)
+
+	return &RatelimitedConn{
+		Conn:   conn,
+		After:  int64(limit.AfterBytes),
+		Bucket: ratelimit.NewBucketWithRate(float64(limit.BytesPerSec), int64(burstBytesPerSec)),
+	}
+}
+
 var (
 	size  = 8192
 	empty = make([]byte, size)
@@ -125,6 +158,8 @@ func Value(vals ...byte) (value int) {
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
 func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
+	postHandshakeRecordsLens := DetectPostHandshakeRecordsLens(config)
+
 	remoteAddr := conn.RemoteAddr().String()
 	if config.Show {
 		fmt.Printf("REALITY remoteAddr: %v\n", remoteAddr)
@@ -218,7 +253,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			if config.Show && hs.clientHello != nil {
 				fmt.Printf("REALITY remoteAddr: %v\tforwarded SNI: %v\n", remoteAddr, hs.clientHello.serverName)
 			}
-			io.Copy(target, underlying)
+			io.Copy(target, NewRatelimitedConn(underlying, &config.LimitFallbackUpload))
 		}
 		waitGroup.Done()
 	}()
@@ -330,6 +365,19 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			if err != nil {
 				break
 			}
+			for _, length := range postHandshakeRecordsLens[hs.clientHello.serverName] {
+				plainText := make([]byte, length-16)
+				plainText[0] = 23
+				plainText[1] = 3
+				plainText[2] = 3
+				plainText[3] = byte((length - 5) >> 8)
+				plainText[4] = byte((length - 5))
+				plainText[5] = 23
+				postHandshakeRecord := hs.c.out.cipher.(aead).Seal(plainText[:5], hs.c.out.seq[:], plainText[5:], plainText[:5])
+				hs.c.out.incSeq()
+				hs.c.write(postHandshakeRecord)
+				fmt.Printf("REALITY remoteAddr: %v\tlen(postHandshakeRecord): %v\n", remoteAddr, len(postHandshakeRecord))
+			}
 			hs.c.isHandshakeComplete.Store(true)
 			break
 		}
@@ -338,13 +386,13 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			if hs.c.conn == conn { // if we processed the Client Hello successfully but the target did not
 				waitGroup.Add(1)
 				go func() {
-					io.Copy(target, underlying)
+					io.Copy(target, NewRatelimitedConn(underlying, &config.LimitFallbackUpload))
 					waitGroup.Done()
 				}()
 			}
 			if !stole {
 				conn.Write(s2cSaved)
-				io.Copy(underlying, target)
+				io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
 				// Here is bidirectional direct forwarding:
 				// client ---underlying--- server ---target--- dest
 				// Call `underlying.CloseWrite()` once `io.Copy()` returned
@@ -418,6 +466,7 @@ func (l *listener) Accept() (net.Conn, error) {
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
 func NewListener(inner net.Listener, config *Config) net.Listener {
+	go DetectPostHandshakeRecordsLens(config)
 	l := new(listener)
 	l.Listener = inner
 	l.config = config
@@ -432,7 +481,7 @@ func NewListener(inner net.Listener, config *Config) net.Listener {
 					return
 				}
 				go func() {
-					defer recover()
+					defer func() { recover() }()
 					c, err = Server(context.Background(), c, l.config)
 					if err == nil {
 						l.conns <- c
