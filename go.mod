@@ -1,4 +1,4 @@
-module github.com/sagernet/reality
+module github.com/xtls/reality
 
 go 1.24
 
