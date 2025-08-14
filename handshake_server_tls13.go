@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
-	"github.com/xtls/reality/fips140tls"
-	"github.com/xtls/reality/hpke"
-	"github.com/xtls/reality/tls13"
+	"github.com/domaingts/electricity/fips140tls"
+	"github.com/domaingts/electricity/hpke"
+	"github.com/domaingts/electricity/tls13"
 )
 
 // maxClientPSKIdentities is the number of client PSK identities the server will
