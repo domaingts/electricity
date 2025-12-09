@@ -51,7 +51,6 @@ import (
 	"time"
 
 	"github.com/juju/ratelimit"
-	"github.com/pires/go-proxyproto"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
@@ -171,19 +170,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		return nil, errors.New("REALITY: failed to dial dest: " + err.Error())
 	}
 
-	if config.Xver == 1 || config.Xver == 2 {
-		if _, err = proxyproto.HeaderProxyFromAddrs(config.Xver, conn.RemoteAddr(), conn.LocalAddr()).WriteTo(target); err != nil {
-			target.Close()
-			conn.Close()
-			return nil, errors.New("REALITY: failed to send PROXY protocol: " + err.Error())
-		}
-	}
-
-	raw := conn
-	if pc, ok := conn.(*proxyproto.Conn); ok {
-		raw = pc.Raw() // for TCP splicing in io.Copy()
-	}
-	underlying := raw.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
+	underlying := conn.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
 
 	mutex := new(sync.Mutex)
 
@@ -200,6 +187,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 	}
 
 	copying := false
+	stole := false
 
 	waitGroup := new(sync.WaitGroup)
 	waitGroup.Add(2)
@@ -208,7 +196,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		for {
 			mutex.Lock()
 			hs.clientHello, _, err = hs.c.readClientHello(context.Background()) // TODO: Change some rules in this function.
-			if copying || err != nil || hs.c.vers != VersionTLS13 || !config.ServerNames[hs.clientHello.serverName] {
+			if err != nil || !config.ServerNames[hs.clientHello.serverName] {
+				stole = true
+				break
+			}
+			if copying || hs.c.vers != VersionTLS13 {
 				break
 			}
 			var peerPub []byte
@@ -268,7 +260,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			break
 		}
 		mutex.Unlock()
-		if hs.c.conn != conn {
+		if hs.c.conn != conn && !stole {
 			if config.Show && hs.clientHello != nil {
 				fmt.Printf("REALITY remoteAddr: %v\tforwarded SNI: %v\n", remoteAddr, hs.clientHello.serverName)
 			}
@@ -429,14 +421,14 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		mutex.Unlock()
 		if hs.c.out.handshakeLen[0] == 0 { // if the target sent an incorrect Server Hello, or before that
 			if hs.c.conn == conn { // if we processed the Client Hello successfully but the target did not
-				waitGroup.Add(1)
-				go func() {
+				waitGroup.Go(func() {
 					io.Copy(target, NewRatelimitedConn(underlying, &config.LimitFallbackUpload))
-					waitGroup.Done()
-				}()
+				})
 			}
 			conn.Write(s2cSaved)
-			io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
+			if !stole {
+				io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
+			}
 			// Here is bidirectional direct forwarding:
 			// client ---underlying--- server ---target--- dest
 			// Call `underlying.CloseWrite()` once `io.Copy()` returned
