@@ -1,15 +1,23 @@
 # REALITY
 
-[![REALITY NFT](https://raw2.seadn.io/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/b0b1721cf5f4c367584e223bb0805f/37b0b1721cf5f4c367584e223bb0805f.svg)](https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/2)
-
-### [Collect a REALITY NFT to support the development of REALITY protocol!](https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/2)
-
 ## THE NEXT FUTURE
 
-Server side implementation of REALITY protocol, a fork of package tls in latest [Go](https://github.com/golang/go/commits/master/src/crypto/tls).
+Server side implementation of REALITY protocol, a fork of package tls in latest [Go](https://github.com/golang/go/tree/master/src/crypto/tls).
 For client side, please follow https://github.com/XTLS/Xray-core/blob/main/transport/internet/reality/reality.go.  
 
 TODO List: TODO
+
+## Donation & NFTs
+
+### [Collect a Project X NFT to support the development of Project X!](https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1)
+
+[<img alt="Project X NFT" width="150px" src="https://raw2.seadn.io/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/7fa9ce900fb39b44226348db330e32/8b7fa9ce900fb39b44226348db330e32.svg" />](https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1)
+
+- **ETH/USDT/USDC: `0xDc3Fe44F0f25D13CACb1C4896CD0D321df3146Ee`**
+- **Project X NFT: https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1**
+- **VLESS NFT: https://opensea.io/collection/vless**
+- **REALITY NFT: https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/2**
+- **Related links: [VLESS Post-Quantum Encryption](https://github.com/XTLS/Xray-core/pull/5067), [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113), [Announcement of NFTs by Project X](https://github.com/XTLS/Xray-core/discussions/3633)**
 
 ## VLESS-XTLS-uTLS-REALITY example for [Xray-core](https://github.com/XTLS/Xray-core)
 
