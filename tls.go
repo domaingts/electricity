@@ -123,10 +123,7 @@ func NewRatelimitedConn(conn net.Conn, limit *LimitFallback) net.Conn {
 		return conn
 	}
 
-	burstBytesPerSec := limit.BurstBytesPerSec
-	if burstBytesPerSec < limit.BytesPerSec {
-		burstBytesPerSec = limit.BytesPerSec
-	}
+	burstBytesPerSec := max(limit.BurstBytesPerSec, limit.BytesPerSec)
 
 	return &RatelimitedConn{
 		Conn:   conn,

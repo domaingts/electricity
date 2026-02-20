@@ -429,13 +429,7 @@ func (hs *serverHandshakeStateTLS13) checkForResumption() error {
 		return nil
 	}
 
-	modeOK := false
-	for _, mode := range hs.clientHello.pskModes {
-		if mode == pskModeDHE {
-			modeOK = true
-			break
-		}
-	}
+	modeOK := slices.Contains(hs.clientHello.pskModes, pskModeDHE)
 	if !modeOK {
 		return nil
 	}
