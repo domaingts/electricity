@@ -25,10 +25,11 @@ import (
 // A Conn represents a secured connection.
 // It implements the net.Conn interface.
 type Conn struct {
-	AuthKey       []byte
-	ClientVer     [3]byte
-	ClientTime    time.Time
-	ClientShortId [8]byte
+	AuthKey           []byte
+	ClientVer         [3]byte
+	ClientTime        time.Time
+	ClientShortId     [8]byte
+	MaxUselessRecords int
 
 	// constant
 	conn        net.Conn
@@ -786,7 +787,7 @@ func (c *Conn) readRecordOrCCS(expectChangeCipherSpec bool) error {
 		// Finished. See RFC 8446, Appendix D.4. Note that according to Section
 		// 5, a server can send a ChangeCipherSpec before its ServerHello, when
 		// c.vers is still unset. That's not useful though and suspicious if the
-		// server then selects a lower protocol version, so don't allow that.
+		// server then selects a lower protocol verÒsion, so don't allow that.
 		if c.vers == VersionTLS13 && !handshakeComplete {
 			return c.retryReadRecord(expectChangeCipherSpec)
 		}
@@ -825,7 +826,10 @@ func (c *Conn) readRecordOrCCS(expectChangeCipherSpec bool) error {
 // a warning alert, empty application_data, or a change_cipher_spec in TLS 1.3.
 func (c *Conn) retryReadRecord(expectChangeCipherSpec bool) error {
 	c.retryCount++
-	if c.retryCount > maxUselessRecords {
+	if c.MaxUselessRecords <= 0 {
+		c.MaxUselessRecords = maxUselessRecords
+	}
+	if c.retryCount > c.MaxUselessRecords {
 		c.sendAlert(alertUnexpectedMessage)
 		return c.in.setErrorLocked(errors.New("tls: too many ignored records"))
 	}
@@ -969,7 +973,10 @@ func (c *Conn) maxPayloadSizeForWrite(typ recordType) int {
 		return maxPlaintext // avoid overflow in multiply below
 	}
 
-	n := min(payloadBytes*int(pkt+1), maxPlaintext)
+	n := payloadBytes * int(pkt+1)
+	if n > maxPlaintext {
+		n = maxPlaintext
+	}
 	return n
 }
 
@@ -1370,7 +1377,7 @@ func (c *Conn) handlePostHandshakeMessage() error {
 		return err
 	}
 	c.retryCount++
-	if c.retryCount > maxUselessRecords {
+	if c.retryCount > c.MaxUselessRecords {
 		c.sendAlert(alertUnexpectedMessage)
 		return c.in.setErrorLocked(errors.New("tls: too many non-advancing records"))
 	}
