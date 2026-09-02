@@ -1,13 +1,13 @@
 module github.com/xtls/reality
 
-go 1.26
+go 1.27
 
 require (
-	github.com/cloudflare/circl v1.6.3
+	github.com/cloudflare/circl v1.6.5
 	github.com/juju/ratelimit v1.0.2
 	github.com/refraction-networking/utls v1.8.2
-	golang.org/x/crypto v0.49.0
-	golang.org/x/sys v0.42.0
+	golang.org/x/crypto v0.55.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
