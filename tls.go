@@ -60,6 +60,19 @@ type CloseWriteConn interface {
 	CloseWrite() error
 }
 
+func dialContext(ctx context.Context, config *Config, network, address string) (net.Conn, error) {
+	if config != nil && config.DialContext != nil {
+		return config.DialContext(ctx, network, address)
+	}
+	return (&net.Dialer{}).DialContext(ctx, network, address)
+}
+
+func closeWrite(conn net.Conn) {
+	if c, ok := conn.(CloseWriteConn); ok {
+		_ = c.CloseWrite()
+	}
+}
+
 type MirrorConn struct {
 	*sync.Mutex
 	net.Conn
@@ -161,13 +174,13 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		fmt.Printf("REALITY remoteAddr: %v\n", remoteAddr)
 	}
 
-	target, err := config.DialContext(ctx, config.Type, config.Dest)
+	target, err := dialContext(ctx, config, config.Type, config.Dest)
 	if err != nil {
 		conn.Close()
 		return nil, errors.New("REALITY: failed to dial dest: " + err.Error())
 	}
 
-	underlying := conn.(CloseWriteConn) // *net.TCPConn or *net.UnixConn
+	underlying := conn
 
 	mutex := new(sync.Mutex)
 
@@ -264,10 +277,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			_, err := io.Copy(target, NewRatelimitedConn(underlying, &config.LimitFallbackUpload))
 			// close target writer when received FIN (err==nil)
 			if err == nil {
-				targetWriterCloser, ok := target.(CloseWriteConn)
-				if ok {
-					targetWriterCloser.CloseWrite()
-				}
+				closeWrite(target)
 			} else {
 				// Close target when encountering RST (or any other errors)
 				target.Close()
@@ -428,11 +438,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			conn.Write(s2cSaved)
 			if !stole {
 				io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
-			} 
+			}
 			// Here is bidirectional direct forwarding:
 			// client ---underlying--- server ---target--- dest
-			// Call `underlying.CloseWrite()` once `io.Copy()` returned
-			underlying.CloseWrite()
+			// Close the client write side once `io.Copy()` returns.
+			closeWrite(underlying)
 		}
 		waitGroup.Done()
 	}()

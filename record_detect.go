@@ -2,6 +2,7 @@ package reality
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"math"
@@ -29,10 +30,11 @@ func DetectPostHandshakeRecordsLens(config *Config) {
 							GlobalPostHandshakeRecordsLens.Store(key, []int{})
 						}
 					}()
-					target, err := net.Dial(config.Type, config.Dest)
+					target, err := dialContext(context.Background(), config, config.Type, config.Dest)
 					if err != nil {
 						return
 					}
+					defer target.Close()
 					detectConn := &PostHandshakeRecordDetectConn{
 						Conn: target,
 						Key:  key,
@@ -58,10 +60,11 @@ func DetectPostHandshakeRecordsLens(config *Config) {
 					io.Copy(io.Discard, uConn)
 				}()
 				go func() {
-					target, err := net.Dial(config.Type, config.Dest)
+					target, err := dialContext(context.Background(), config, config.Type, config.Dest)
 					if err != nil {
 						return
 					}
+					defer target.Close()
 					fingerprint := utls.HelloChrome_Auto
 					nextProtos := []string{"h2", "http/1.1"}
 					if alpn != 2 {
