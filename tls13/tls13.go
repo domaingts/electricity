@@ -36,7 +36,12 @@ func ExpandLabel[H hash.Hash](hash func() H, secret []byte, label string, contex
 	hkdfLabel = append(hkdfLabel, label...)
 	hkdfLabel = append(hkdfLabel, byte(len(context)))
 	hkdfLabel = append(hkdfLabel, context...)
-	b, _ := hkdf.Expand(hash, secret, string(hkdfLabel), length)
+	b, err := hkdf.Expand(hash, secret, string(hkdfLabel), length)
+	if err != nil {
+		// The internal HKDF implementation panics on invalid inputs instead of
+		// returning an error. Preserve that behavior in this public API adapter.
+		panic(err)
+	}
 	return b
 }
 
@@ -44,7 +49,10 @@ func extract[H hash.Hash](hash func() H, newSecret, currentSecret []byte) []byte
 	if newSecret == nil {
 		newSecret = make([]byte, hash().Size())
 	}
-	b, _ := hkdf.Extract(hash, newSecret, currentSecret)
+	b, err := hkdf.Extract(hash, newSecret, currentSecret)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }
 

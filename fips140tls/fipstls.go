@@ -26,8 +26,11 @@ func Force() {
 
 // Required reports whether FIPS-approved settings are required.
 //
-// Required is true if FIPS 140-3 mode is enabled with GODEBUG=fips140=on, or if
-// the crypto/tls/fipsonly package is imported by a Go+BoringCrypto build.
+// Required is true when native crypto/fips140 reports FIPS 140-3 mode enabled
+// with GODEBUG=fips140=on, or after Force has been called. This fork does not
+// share the standard library's internal crypto/tls/fipsonly state: importing
+// that package in a BoringCrypto build does not update this package's flag.
+// BoringCrypto callers that need this policy must call Force explicitly.
 func Required() bool {
 	return required.Load()
 }

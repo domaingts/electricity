@@ -81,7 +81,7 @@ type SessionState struct {
 	version     uint16
 	isClient    bool
 	cipherSuite uint16
-	// createdAt is the generation time of the secret on the sever (which for
+	// createdAt is the generation time of the secret on the server (which for
 	// TLS 1.0–1.2 might be earlier than the current session) and the time at
 	// which the ticket was received on the client.
 	createdAt        uint64 // seconds since UNIX epoch
@@ -376,6 +376,7 @@ func (c *Config) decryptTicket(encrypted []byte, ticketKeys []ticketKey) []byte 
 	ciphertext := encrypted[aes.BlockSize : len(encrypted)-sha256.Size]
 	authenticated := encrypted[:len(encrypted)-sha256.Size]
 	macBytes := encrypted[len(encrypted)-sha256.Size:]
+
 	for _, key := range ticketKeys {
 		mac := hmac.New(sha256.New, key.hmacKey[:])
 		mac.Write(authenticated)

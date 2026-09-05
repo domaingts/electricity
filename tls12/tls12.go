@@ -23,7 +23,7 @@ func PRF[H hash.Hash](hash func() H, secret []byte, label string, seed []byte, k
 
 // pHash implements the P_hash function, as defined in RFC 5246, Section 5.
 func pHash[H hash.Hash](hash1 func() H, result, secret, seed []byte) {
-	h := hmac.New(any(hash1).(func() hash.Hash), secret)
+	h := hmac.New(func() hash.Hash { return hash1() }, secret)
 	h.Write(seed)
 	a := h.Sum(nil)
 
@@ -47,22 +47,9 @@ const extendedMasterSecretLabel = "extended master secret"
 // MasterSecret implements the TLS 1.2 extended master secret derivation, as
 // defined in RFC 7627 and allowed by SP 800-135, Revision 1, Section 4.2.2.
 func MasterSecret[H hash.Hash](hash func() H, preMasterSecret, transcript []byte) []byte {
-	// "The TLS 1.2 KDF is an approved KDF when the following conditions are
-	// satisfied: [...] (3) P_HASH uses either SHA-256, SHA-384 or SHA-512."
-	//h := hash()
-	hash()
-	// switch any(h).(type) {
-	// case *sha256.Digest:
-	// 	if h.Size() != 32 {
-	// 		fips140.RecordNonApproved()
-	// 	}
-	// case *sha512.Digest:
-	// 	if h.Size() != 46 && h.Size() != 64 {
-	// 		fips140.RecordNonApproved()
-	// 	}
-	// default:
-	// 	fips140.RecordNonApproved()
-	// }
+	// The fork enforces its TLS hash policy during negotiation. Unlike the
+	// standard library's internal implementation, this public HMAC adapter
+	// cannot record a TLS-KDF-specific FIPS service indicator.
 
 	return PRF(hash, preMasterSecret, extendedMasterSecretLabel, transcript, masterSecretLength)
 }

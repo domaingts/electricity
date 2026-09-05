@@ -5,7 +5,7 @@
 // Server side implementation of REALITY protocol, a fork of package tls in latest Go.
 // For client side, please follow https://github.com/XTLS/Xray-core/blob/main/transport/internet/reality/reality.go.
 
-// Package tls partially implements TLS 1.2, as specified in RFC 5246,
+// Package reality partially implements TLS 1.2, as specified in RFC 5246,
 // and TLS 1.3, as specified in RFC 8446.
 //
 // # FIPS 140-3 mode
@@ -18,6 +18,12 @@
 // algorithms supported by the FIPS 140-3 Go Cryptographic Module selected with
 // GOFIPS140, and may change across Go versions.
 //
+// These negotiation restrictions do not make this external fork or the REALITY
+// protocol FIPS validated. In particular, the public AES-GCM adapter used here
+// cannot access the standard library's internal TLS nonce-policy constructors,
+// so TLS connections do not support strict GODEBUG=fips140=only enforcement.
+// Use crypto/tls when strict FIPS enforcement is required.
+//
 // [FIPS 140-3 mode]: https://go.dev/doc/security/fips140
 package reality
 
@@ -27,13 +33,13 @@ package reality
 // https://www.imperialviolet.org/2013/02/04/luckythirteen.html.
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/mldsa"
 	"crypto/mlkem"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -193,7 +199,8 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			},
 			config: config,
 		},
-		ctx: context.Background(),
+		ctx:     context.Background(),
+		reality: true,
 	}
 
 	copying := false
@@ -353,9 +360,11 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 					hs.hello = new(serverHelloMsg)
 					if !hs.hello.unmarshal(s2cSaved[recordHeaderLen:handshakeLen]) ||
 						hs.hello.vers != VersionTLS12 || hs.hello.supportedVersion != VersionTLS13 ||
-						cipherSuiteTLS13ByID(hs.hello.cipherSuite) == nil ||
-						(!(hs.hello.serverShare.group == X25519 && len(hs.hello.serverShare.data) == 32) &&
-							!(hs.hello.serverShare.group == X25519MLKEM768 && len(hs.hello.serverShare.data) == mlkem.CiphertextSize768+32)) {
+						cipherSuiteTLS13ByID(hs.hello.cipherSuite) == nil {
+						break f
+					}
+					serverKeyShareLen, ok := expectedServerKeyShareLen(hs.hello.serverShare.group)
+					if !ok || len(hs.hello.serverShare.data) != serverKeyShareLen {
 						break f
 					}
 				}
@@ -473,14 +482,15 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 	}
 	return nil, fmt.Errorf("REALITY: processed invalid connection from %s: %s", remoteAddr, failureReason)
 
-	/*
-		c := &Conn{
-			conn:   conn,
-			config: config,
-		}
-		c.handshakeFn = c.serverHandshake
-		return c
-	*/
+}
+
+func serverConn(conn net.Conn, config *Config) *Conn {
+	c := &Conn{
+		conn:   conn,
+		config: config,
+	}
+	c.handshakeFn = c.serverHandshake
+	return c
 }
 
 // Client returns a new TLS client side connection
@@ -508,13 +518,6 @@ type listener struct {
 // Accept waits for and returns the next incoming TLS connection.
 // The returned connection is of type *Conn.
 func (l *listener) Accept() (net.Conn, error) {
-	/*
-		c, err := l.Listener.Accept()
-		if err != nil {
-			return nil, err
-		}
-		return Server(c, l.config), nil
-	*/
 	if c, ok := <-l.conns; ok {
 		return c, nil
 	}
@@ -571,6 +574,8 @@ func Listen(network, laddr string, config *Config) (net.Listener, error) {
 }
 
 type timeoutError struct{}
+
+var _ error = timeoutError{}
 
 func (timeoutError) Error() string   { return "tls: DialWithDialer timed out" }
 func (timeoutError) Timeout() bool   { return true }
@@ -699,10 +704,6 @@ func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 // files. The files must contain PEM encoded data. The certificate file may
 // contain intermediate certificates following the leaf certificate to form a
 // certificate chain. On successful return, Certificate.Leaf will be populated.
-//
-// Before Go 1.23 Certificate.Leaf was left nil, and the parsed certificate was
-// discarded. This behavior can be re-enabled by setting "x509keypairleaf=0"
-// in the GODEBUG environment variable.
 func LoadX509KeyPair(certFile, keyFile string) (Certificate, error) {
 	certPEMBlock, err := os.ReadFile(certFile)
 	if err != nil {
@@ -717,10 +718,6 @@ func LoadX509KeyPair(certFile, keyFile string) (Certificate, error) {
 
 // X509KeyPair parses a public/private key pair from a pair of
 // PEM encoded data. On successful return, Certificate.Leaf will be populated.
-//
-// Before Go 1.23 Certificate.Leaf was left nil, and the parsed certificate was
-// discarded. This behavior can be re-enabled by setting "x509keypairleaf=0"
-// in the GODEBUG environment variable.
 func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 	fail := func(err error) (Certificate, error) { return Certificate{}, err }
 
@@ -774,7 +771,6 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 	if err != nil {
 		return fail(err)
 	}
-
 	cert.Leaf = x509Cert
 
 	cert.PrivateKey, err = parsePrivateKey(keyDERBlock.Bytes)
@@ -788,7 +784,7 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if pub.N.Cmp(priv.N) != 0 {
+		if !priv.PublicKey.Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	case *ecdsa.PublicKey:
@@ -796,7 +792,7 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if pub.X.Cmp(priv.X) != 0 || pub.Y.Cmp(priv.Y) != 0 {
+		if !priv.PublicKey.Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	case ed25519.PublicKey:
@@ -804,7 +800,15 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if !bytes.Equal(priv.Public().(ed25519.PublicKey), pub) {
+		if !priv.Public().(ed25519.PublicKey).Equal(pub) {
+			return fail(errors.New("tls: private key does not match public key"))
+		}
+	case *mldsa.PublicKey:
+		priv, ok := cert.PrivateKey.(*mldsa.PrivateKey)
+		if !ok {
+			return fail(errors.New("tls: private key type does not match public key type"))
+		}
+		if !priv.PublicKey().Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	default:
@@ -818,20 +822,21 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 // PKCS #1 private keys by default, while OpenSSL 1.0.0 generates PKCS #8 keys.
 // OpenSSL ecparam generates SEC1 EC private keys for ECDSA. We try all three.
 func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
-	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+	key, err := x509.ParsePKCS8PrivateKey(der)
+	pkcs8Err := err // Return the PKCS#8 error if all parsing attempts fail.
+	if err != nil {
+		key, err = x509.ParsePKCS1PrivateKey(der)
+	}
+	if err != nil {
+		key, err = x509.ParseECPrivateKey(der)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("tls: failed to parse private key: %w", pkcs8Err)
+	}
+	switch key := key.(type) {
+	case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, *mldsa.PrivateKey:
 		return key, nil
+	default:
+		return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")
 	}
-	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
-		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
-			return key, nil
-		default:
-			return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")
-		}
-	}
-	if key, err := x509.ParseECPrivateKey(der); err == nil {
-		return key, nil
-	}
-
-	return nil, errors.New("tls: failed to parse private key")
 }
