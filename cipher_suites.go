@@ -13,10 +13,10 @@ import (
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
+	_ "crypto/sha512" // for crypto.SHA384
 	"fmt"
 	"hash"
 	"runtime"
-	"slices"
 	_ "unsafe" // for linkname
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -147,8 +147,8 @@ type cipherSuite struct {
 }
 
 var cipherSuites = []*cipherSuite{ // TODO: replace with a map, since the order doesn't matter.
-	{TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305, 32, 0, 12, ecdheRSAKA, suiteECDHE | suiteTLS12, nil, nil, aeadChaCha20Poly1305},
-	{TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, 32, 0, 12, ecdheECDSAKA, suiteECDHE | suiteECSign | suiteTLS12, nil, nil, aeadChaCha20Poly1305},
+	{TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, 32, 0, 12, ecdheRSAKA, suiteECDHE | suiteTLS12, nil, nil, aeadChaCha20Poly1305},
+	{TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, 32, 0, 12, ecdheECDSAKA, suiteECDHE | suiteECSign | suiteTLS12, nil, nil, aeadChaCha20Poly1305},
 	{TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheECDSAKA, suiteECDHE | suiteECSign | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, 32, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12 | suiteSHA384, nil, nil, aeadAESGCM},
@@ -180,8 +180,10 @@ func selectCipherSuite(ids, supportedIDs []uint16, ok func(*cipherSuite) bool) *
 			continue
 		}
 
-		if slices.Contains(supportedIDs, id) {
-			return candidate
+		for _, suppID := range supportedIDs {
+			if id == suppID {
+				return candidate
+			}
 		}
 	}
 	return nil
@@ -280,7 +282,7 @@ var cipherSuitesPreferenceOrder = []uint16{
 	// AEADs w/ ECDHE
 	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 	TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 
 	// CBC w/ ECDHE
 	TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA, TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
@@ -309,7 +311,7 @@ var cipherSuitesPreferenceOrder = []uint16{
 
 var cipherSuitesPreferenceOrderNoAES = []uint16{
 	// ChaCha20Poly1305
-	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 
 	// AES-GCM w/ ECDHE
 	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,

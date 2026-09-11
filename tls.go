@@ -27,13 +27,13 @@ package reality
 // https://www.imperialviolet.org/2013/02/04/luckythirteen.html.
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/mldsa"
 	"crypto/mlkem"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -146,7 +146,7 @@ func NewRatelimitedConn(conn net.Conn, limit *LimitFallback) net.Conn {
 }
 
 var (
-	size  = 8192
+	size  = 17 * 1024
 	empty = make([]byte, size)
 	types = [7]string{
 		"Server Hello",
@@ -174,7 +174,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		fmt.Printf("REALITY remoteAddr: %v\n", remoteAddr)
 	}
 
-	target, err := dialContext(ctx, config, config.Type, config.Dest)
+	target, err := config.DialContext(ctx, config.Type, config.Dest)
 	if err != nil {
 		conn.Close()
 		return nil, errors.New("REALITY: failed to dial dest: " + err.Error())
@@ -213,20 +213,30 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			if copying || hs.c.vers != VersionTLS13 {
 				break
 			}
-			var peerPub []byte
+			var peerPub, peerPub2 []byte
 			for _, keyShare := range hs.clientHello.keyShares {
+				if keyShare.group == X25519MLKEM768 && len(keyShare.data) == mlkem.EncapsulationKeySize768+32 {
+					if peerPub2 != nil {
+						peerPub2 = nil // ensure fail
+						break          // ensure once
+					}
+					peerPub2 = keyShare.data[mlkem.EncapsulationKeySize768:]
+					continue // fast continue
+				}
 				if keyShare.group == X25519 && len(keyShare.data) == 32 {
+					if peerPub != nil {
+						peerPub2 = nil // ensure fail
+						break          // ensure once
+					}
 					peerPub = keyShare.data
-					break
+					break // ensure order
 				}
 			}
+			if peerPub2 == nil {
+				break // reject outdated/strange Client Hello that doesn't have X25519MLKEM768 before optional X25519
+			}
 			if peerPub == nil {
-				for _, keyShare := range hs.clientHello.keyShares {
-					if keyShare.group == X25519MLKEM768 && len(keyShare.data) == mlkem.EncapsulationKeySize768+32 {
-						peerPub = keyShare.data[mlkem.EncapsulationKeySize768:]
-						break
-					}
-				}
+				peerPub = peerPub2 // secondary choice: X25519 in X25519MLKEM768
 			}
 			for peerPub != nil {
 				if hs.c.AuthKey, err = curve25519.X25519(config.PrivateKey, peerPub); err != nil {
@@ -788,7 +798,7 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if pub.N.Cmp(priv.N) != 0 {
+		if !priv.PublicKey.Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	case *ecdsa.PublicKey:
@@ -796,7 +806,7 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if pub.X.Cmp(priv.X) != 0 || pub.Y.Cmp(priv.Y) != 0 {
+		if !priv.PublicKey.Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	case ed25519.PublicKey:
@@ -804,7 +814,15 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (Certificate, error) {
 		if !ok {
 			return fail(errors.New("tls: private key type does not match public key type"))
 		}
-		if !bytes.Equal(priv.Public().(ed25519.PublicKey), pub) {
+		if !priv.Public().(ed25519.PublicKey).Equal(pub) {
+			return fail(errors.New("tls: private key does not match public key"))
+		}
+	case *mldsa.PublicKey:
+		priv, ok := cert.PrivateKey.(*mldsa.PrivateKey)
+		if !ok {
+			return fail(errors.New("tls: private key type does not match public key type"))
+		}
+		if !priv.PublicKey().Equal(pub) {
 			return fail(errors.New("tls: private key does not match public key"))
 		}
 	default:
@@ -823,7 +841,7 @@ func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
 		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey, *mldsa.PrivateKey:
 			return key, nil
 		default:
 			return nil, errors.New("tls: found unknown private key type in PKCS#8 wrapping")
