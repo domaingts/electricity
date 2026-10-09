@@ -71,6 +71,7 @@ type serverHandshakeStateTLS13 struct {
 	echContext      *echServerContext
 }
 
+//////////////////////////////////// [REALITY] SECTION: do handshake
 var (
 	ed25519Priv       ed25519.PrivateKey
 	signedCert        []byte
@@ -197,6 +198,7 @@ func (hs *serverHandshakeStateTLS13) handshake() error {
 
 	return nil
 }
+//////////////////////////////////// [REALITY] SECTION END
 
 func (hs *serverHandshakeStateTLS13) processClientHello() error {
 	c := hs.c
@@ -226,7 +228,7 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 		if id == TLS_FALLBACK_SCSV {
 			// Use c.vers instead of max(supported_versions) because an attacker
 			// could defeat this by adding an arbitrary high version otherwise.
-			if c.vers < c.config.maxSupportedVersion(roleServer) {
+			if c.vers < c.config.maxSupportedVersion(roleServer, c.quic != nil) {
 				c.sendAlert(alertInappropriateFallback)
 				return errors.New("tls: client using inappropriate protocol fallback")
 			}
@@ -343,7 +345,7 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 	ke, err := keyExchangeForCurveID(selectedGroup)
 	if err != nil {
 		c.sendAlert(alertInternalError)
-		return errors.New("tls: CurvePreferences includes unsupported curve")
+		return errors.New("tls: internal error: supportsCurve accepted unimplemented curve")
 	}
 	hs.sharedKey, hs.hello.serverShare, err = ke.serverSharedSecret(c.config.rand(), clientKeyShare.data)
 	if err != nil {
@@ -587,6 +589,9 @@ func (hs *serverHandshakeStateTLS13) pickCertificate() error {
 		}
 		return err
 	}
+	if certificate != nil {
+		hs.c.localCertificate = certificate.Certificate
+	}
 	hs.sigAlg, err = selectSignatureScheme(c.vers, certificate, hs.clientHello.supportedSignatureAlgorithms)
 	if err != nil {
 		// getCertificate returned a certificate that is unsupported or
@@ -619,7 +624,7 @@ func (hs *serverHandshakeStateTLS13) doHelloRetryRequest(selectedGroup CurveID) 
 	// Make sure the client didn't send extra handshake messages alongside
 	// their initial client_hello. If they sent two client_hello messages,
 	// we will consume the second before they respond to the server_hello.
-	if c.hand.Len() != 0 {
+	if c.handLen() != 0 {
 		c.sendAlert(alertUnexpectedMessage)
 		return nil, errors.New("tls: handshake buffer not empty before HelloRetryRequest")
 	}
@@ -829,6 +834,7 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 		return err
 	}
 
+	//////////////////////////////////// [REALITY] SECTION: do handshake
 	/*
 		if _, err := hs.c.writeHandshakeRecord(hs.hello, hs.transcript); err != nil {
 			return err
@@ -840,6 +846,7 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 			return err
 		}
 	}
+	//////////////////////////////////// [REALITY] SECTION END
 
 	if err := hs.sendDummyChangeCipherSpec(); err != nil {
 		return err

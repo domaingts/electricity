@@ -343,25 +343,16 @@ var disabledCipherSuites = map[uint16]bool{
 	TLS_ECDHE_ECDSA_WITH_RC4_128_SHA: true,
 	TLS_ECDHE_RSA_WITH_RC4_128_SHA:   true,
 	TLS_RSA_WITH_RC4_128_SHA:         true,
-}
 
-// rsaKexCiphers contains the ciphers which use RSA based key exchange,
-// which we also disable by default unless a GODEBUG is set.
-var rsaKexCiphers = map[uint16]bool{
-	TLS_RSA_WITH_RC4_128_SHA:        true,
+	// RSA key exchange
 	TLS_RSA_WITH_3DES_EDE_CBC_SHA:   true,
 	TLS_RSA_WITH_AES_128_CBC_SHA:    true,
 	TLS_RSA_WITH_AES_256_CBC_SHA:    true,
-	TLS_RSA_WITH_AES_128_CBC_SHA256: true,
 	TLS_RSA_WITH_AES_128_GCM_SHA256: true,
 	TLS_RSA_WITH_AES_256_GCM_SHA384: true,
-}
 
-// tdesCiphers contains 3DES ciphers,
-// which we also disable by default unless a GODEBUG is set.
-var tdesCiphers = map[uint16]bool{
+	// 3DES
 	TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA: true,
-	TLS_RSA_WITH_3DES_EDE_CBC_SHA:       true,
 }
 
 var (
@@ -426,7 +417,13 @@ func cipherAES(key, iv []byte, isRead bool) any {
 
 // macSHA1 returns a SHA-1 based constant time MAC.
 func macSHA1(key []byte) hash.Hash {
-	return hmac.New(sha1.New, key)
+	h := sha1.New
+	// The BoringCrypto SHA1 does not have a constant-time
+	// checksum function, so don't try to use it.
+	//if !boring.Enabled {
+		h = newConstantTimeHash(h)
+	//}
+	return hmac.New(h, key)
 }
 
 // macSHA256 returns a SHA-256 based MAC. This is only supported in TLS 1.2 and

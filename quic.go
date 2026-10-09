@@ -185,19 +185,17 @@ type quicState struct {
 
 // QUICClient returns a new TLS client side connection using QUICTransport as the
 // underlying transport. The config cannot be nil.
-//
-// The config's MinVersion must be at least TLS 1.3.
 func QUICClient(config *QUICConfig) *QUICConn {
 	return newQUICConn(Client(nil, config.TLSConfig), config)
 }
 
 // QUICServer returns a new TLS server side connection using QUICTransport as the
 // underlying transport. The config cannot be nil.
-//
-// The config's MinVersion must be at least TLS 1.3.
 func QUICServer(config *QUICConfig) *QUICConn {
+	//////////////////////////////////// [REALITY] SECTION: create Reality server
 	c, _ := Server(context.Background(), nil, config.TLSConfig)
 	return newQUICConn(c, config)
+	//////////////////////////////////// [REALITY] SECTION END
 }
 
 func newQUICConn(conn *Conn, config *QUICConfig) *QUICConn {
@@ -222,9 +220,6 @@ func (q *QUICConn) Start(ctx context.Context) error {
 		return quicError(errors.New("tls: Start called more than once"))
 	}
 	q.conn.quic.started = true
-	if q.conn.config.MinVersion < VersionTLS13 {
-		return quicError(errors.New("tls: Config MinVersion must be at least TLS 1.3"))
-	}
 	go q.conn.HandshakeContext(ctx)
 	if _, ok := <-q.conn.quic.blockedc; !ok {
 		return q.conn.handshakeErr
@@ -296,9 +291,9 @@ func (q *QUICConn) HandleData(level QUICEncryptionLevel, data []byte) error {
 	// The handshake goroutine has exited.
 	c.handshakeMutex.Lock()
 	defer c.handshakeMutex.Unlock()
-	c.hand.Write(c.quic.readbuf)
+	c.handBuf().Write(c.quic.readbuf)
 	c.quic.readbuf = nil
-	for q.conn.hand.Len() >= 4 && q.conn.handshakeErr == nil {
+	for q.conn.handLen() >= 4 && q.conn.handshakeErr == nil {
 		b := q.conn.hand.Bytes()
 		n := int(b[1])<<16 | int(b[2])<<8 | int(b[3])
 		if n > maxHandshake {
@@ -312,6 +307,7 @@ func (q *QUICConn) HandleData(level QUICEncryptionLevel, data []byte) error {
 			q.conn.handshakeErr = err
 		}
 	}
+	q.conn.releaseHand()
 	if q.conn.handshakeErr != nil {
 		return quicError(q.conn.handshakeErr)
 	}
@@ -402,7 +398,7 @@ func quicError(err error) error {
 }
 
 func (c *Conn) quicReadHandshakeBytes(n int) error {
-	for c.hand.Len() < n {
+	for c.handLen() < n {
 		if err := c.quicWaitForSignal(); err != nil {
 			return err
 		}
@@ -415,7 +411,7 @@ func (c *Conn) quicSetReadSecret(level QUICEncryptionLevel, suite uint16, secret
 	// read keys, since that can cause messages to be parsed that were encrypted
 	// using old keys which are no longer appropriate.
 	// TODO(roland): we should merge this check with the similar one in setReadTrafficSecret.
-	if c.hand.Len() != 0 {
+	if c.handLen() != 0 {
 		c.sendAlert(alertUnexpectedMessage)
 		return errors.New("tls: handshake buffer not empty before setting read traffic secret")
 	}
@@ -528,7 +524,7 @@ func (c *Conn) quicWaitForSignal() error {
 		// The connection has been canceled.
 		return c.sendAlertLocked(alertCloseNotify)
 	}
-	c.hand.Write(c.quic.readbuf)
+	c.handBuf().Write(c.quic.readbuf)
 	c.quic.readbuf = nil
 	return nil
 }

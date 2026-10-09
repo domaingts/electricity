@@ -7,7 +7,7 @@ require (
 	github.com/juju/ratelimit v1.0.2
 	github.com/refraction-networking/utls v1.8.2
 	golang.org/x/crypto v0.57.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
