@@ -31,8 +31,10 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/hkdf"
 	"crypto/mldsa"
 	"crypto/mlkem"
 	"crypto/rsa"
@@ -51,11 +53,10 @@ import (
 	"time"
 
 	"github.com/juju/ratelimit"
-	"golang.org/x/crypto/curve25519"
-	"golang.org/x/crypto/hkdf"
+	"github.com/pires/go-proxyproto"
 )
 
-//////////////////////////////////// [REALITY] SECTION: Reality server
+// [REALITY] SECTION: Reality server
 type CloseWriteConn interface {
 	net.Conn
 	CloseWrite() error
@@ -219,7 +220,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 				if keyShare.group == X25519MLKEM768 && len(keyShare.data) == mlkem.EncapsulationKeySize768+32 {
 					if peerPub2 != nil {
 						peerPub2 = nil // ensure fail
-						break // ensure once
+						break          // ensure once
 					}
 					peerPub2 = keyShare.data[mlkem.EncapsulationKeySize768:]
 					continue // fast continue
@@ -227,7 +228,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 				if keyShare.group == X25519 && len(keyShare.data) == 32 {
 					if peerPub != nil {
 						peerPub2 = nil // ensure fail
-						break // ensure once
+						break          // ensure once
 					}
 					peerPub = keyShare.data
 					break // ensure order
@@ -239,11 +240,15 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			if peerPub == nil {
 				peerPub = peerPub2 // secondary choice: X25519 in X25519MLKEM768
 			}
-			for peerPub != nil {
-				if hs.c.AuthKey, err = curve25519.X25519(config.PrivateKey, peerPub); err != nil {
+			for peerPub != nil && config.PrivateKey != nil {
+				peerKey, err := ecdh.X25519().NewPublicKey(peerPub)
+				if err != nil {
 					break
 				}
-				if _, err = hkdf.New(sha256.New, hs.c.AuthKey, hs.clientHello.random[:20], []byte("REALITY")).Read(hs.c.AuthKey); err != nil {
+				if hs.c.AuthKey, err = config.PrivateKey.ECDH(peerKey); err != nil {
+					break
+				}
+				if hs.c.AuthKey, err = hkdf.Key(sha256.New, hs.c.AuthKey, hs.clientHello.random[:20], "REALITY", 32); err != nil {
 					break
 				}
 				block, _ := aes.NewCipher(hs.c.AuthKey)
@@ -449,7 +454,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			conn.Write(s2cSaved)
 			if !stole {
 				io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
-			}
+			}			
 			// Here is bidirectional direct forwarding:
 			// client ---underlying--- server ---target--- dest
 			// Call `underlying.CloseWrite()` once `io.Copy()` returned
@@ -493,7 +498,8 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		return c
 	*/
 }
-//////////////////////////////////// [REALITY] SECTION END
+
+// [REALITY] SECTION END
 
 // Client returns a new TLS client side connection
 // using conn as the underlying transport.
@@ -513,9 +519,9 @@ func Client(conn net.Conn, config *Config) *Conn {
 type listener struct {
 	net.Listener
 	config *Config
-//////////////////////////////////// [REALITY] SECTION: listener
-	conns  chan net.Conn
-	err    error
+	// [REALITY] SECTION: listener
+	conns chan net.Conn
+	err   error
 }
 
 // Accept waits for and returns the next incoming TLS connection.
@@ -565,7 +571,8 @@ func NewListener(inner net.Listener, config *Config) net.Listener {
 	}
 	return l
 }
-//////////////////////////////////// [REALITY] SECTION END
+
+// [REALITY] SECTION END
 
 // Listen creates a TLS listener accepting connections on the
 // given network address using net.Listen.
