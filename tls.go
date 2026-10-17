@@ -53,7 +53,6 @@ import (
 	"time"
 
 	"github.com/juju/ratelimit"
-	"github.com/pires/go-proxyproto"
 )
 
 // [REALITY] SECTION: Reality server
@@ -176,7 +175,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 		fmt.Printf("REALITY remoteAddr: %v\n", remoteAddr)
 	}
 
-	target, err := config.DialContext(ctx, config.Type, config.Dest)
+	target, err := dialContext(ctx, config, config.Type, config.Dest)
 	if err != nil {
 		conn.Close()
 		return nil, errors.New("REALITY: failed to dial dest: " + err.Error())
@@ -454,7 +453,7 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
 			conn.Write(s2cSaved)
 			if !stole {
 				io.Copy(underlying, NewRatelimitedConn(target, &config.LimitFallbackDownload))
-			}			
+			}
 			// Here is bidirectional direct forwarding:
 			// client ---underlying--- server ---target--- dest
 			// Call `underlying.CloseWrite()` once `io.Copy()` returned
