@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	utls "github.com/xtls/utls"
+	utls "github.com/refraction-networking/utls"
 )
 
 // Reality specifc file, used for target detection
